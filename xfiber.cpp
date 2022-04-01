@@ -32,7 +32,7 @@ void XFiber::WakeupFiber(Fiber *fiber) {
     ready_fibers_.push_back(fiber);
 }
 
-void XFiber::AddTask(std::function<void ()> run, size_t stack_size, std::string fiber_name) {
+void XFiber::CreateFiber(std::function<void ()> run, size_t stack_size, std::string fiber_name) {
     if (stack_size == 0) {
         stack_size = 431072;
     }
@@ -163,10 +163,12 @@ bool XFiber::UnregisterFdFromSched(int fd) {
     ev.data.fd = fd;
 
     if (epoll_ctl(efd_, EPOLL_CTL_DEL, fd, &ev) < 0) {
-        perror("epoll_ctl");
-        exit(-1);
+        //exit(-1);
+        LOG(ERROR) << "unregister fd[" << fd << "] from epoll efd[" << efd_ << "] failed, msg=" << strerror(errno);
     }
-    LOG(ERROR) << "unregister fd[" << fd << "] from epoll efd[" << efd_ << "] success!";
+    else {
+        LOG(ERROR) << "unregister fd[" << fd << "] from epoll efd[" << efd_ << "] success!";
+    }
     return true;
 }
 

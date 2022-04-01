@@ -10,13 +10,7 @@ public:
 
     ~Connection();
 
-    // int ReadN(int n) override;
+    ssize_t Write(const char *buf, size_t sz, int timeout_ms=-1) const;
 
-    // int WriteN(int n) override;
-
-    int Write(const std::string &buf);
-
-    int Write(const char *buf, size_t buf_size);
-
-    int Read(std::string &buf);
+    ssize_t Read(char *buf, size_t sz, int timeout_ms=-1) const;
 };

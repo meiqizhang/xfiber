@@ -26,7 +26,7 @@ public:
 
     void WakeupFiber(Fiber *fiber);
 
-    void AddTask(std::function<void()> run, size_t stack_size = 0, std::string fiber_name="");
+    void CreateFiber(std::function<void()> run, size_t stack_size = 0, std::string fiber_name="");
 
     void Dispatch();
 

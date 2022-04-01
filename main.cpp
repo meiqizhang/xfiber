@@ -38,24 +38,21 @@ int main() {
     }, 0, "f2");
     */
 
-    xfiber->AddTask([&]{
-        Listener listener = Listener::ListenTCP(8888);
+    xfiber->CreateFiber([&]{
+        Listener listener = Listener::ListenTCP(6379);
         while (true) {
             shared_ptr<Connection> conn = listener.Accept();
-            xfiber->AddTask([conn] {
+            xfiber->CreateFiber([conn] {
                 while (true) {
-                    string msg;
-                    int n = conn->Read(msg);
-                    if (n == 0) {
+                    char recv_buf[512];
+                    int n = conn->Read(recv_buf, 512);
+                    if (n <= 0) {
                         break;
                     }
-                    cout << "recv: " << msg << endl;
-                    msg = "echo " + msg;
-                    while (msg.length() < 120157) {
-                        msg += "+";
-                    }
-                    msg += "最后的字符";
-                    conn->Write(msg);
+                    recv_buf[n] = '\0';
+                    //cout << "recv: " << recv_buf << endl;
+                    char *rsp = "+OK\r\n";
+                    conn->Write(rsp, strlen(rsp));
                 }
             }, 0, "server");
         }
