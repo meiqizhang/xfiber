@@ -66,6 +66,9 @@ std::shared_ptr<Connection> Listener::Accept() {
                 xfiber->RegisterFdToSchedWithFiber(fd_, xfiber->CurrFiber(), 0);
                 xfiber->SwitchToSchedFiber();
             }
+            else if (errno == EINTR) {
+                LOG(INFO) << "accept client connect return interrupt error, ignore and conitnue...";
+            }
             else {
                 perror("accept");
             }

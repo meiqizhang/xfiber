@@ -13,7 +13,7 @@
 
 XFiber::XFiber() {
     curr_fiber_ = nullptr;
-    efd_ = epoll_create1(0);
+    efd_ = epoll_create1(1024);
     if (efd_ < 0) {
         perror("epoll_create");
         exit(-1);
@@ -34,10 +34,9 @@ void XFiber::WakeupFiber(Fiber *fiber) {
 
 void XFiber::CreateFiber(std::function<void ()> run, size_t stack_size, std::string fiber_name) {
     if (stack_size == 0) {
-        stack_size = 431072;
+        stack_size = 1024 * 1024;
     }
-    Fiber *fiber = new Fiber(run, stack_size, fiber_name);
-    fiber->SetXFiber(this);
+    Fiber *fiber = new Fiber(run, this, stack_size, fiber_name);
     ready_fibers_.push_back(fiber);
     LOG(DEBUG) << "create a new fiber with id[" << fiber->Seq() << "]" << fiber;
 }
@@ -45,11 +44,11 @@ void XFiber::CreateFiber(std::function<void ()> run, size_t stack_size, std::str
 void XFiber::Dispatch() {
     while (true) {
         if (ready_fibers_.size() > 0) {
-            std::deque<Fiber *> ready = std::move(ready_fibers_);
+            running_fibers_ = std::move(ready_fibers_);
             ready_fibers_.clear();
-            LOG(DEBUG) << "There are " << ready.size() << " fiber(s) in ready list, ready to run...";
+            LOG(DEBUG) << "There are " << running_fibers_.size() << " fiber(s) in ready list, ready to run...";
 
-            for (auto iter = ready.begin(); iter != ready.end(); iter++) {
+            for (auto iter = running_fibers_.begin(); iter != running_fibers_.end(); iter++) {
                 Fiber *fiber = *iter;
                 curr_fiber_ = fiber;
                 LOG(DEBUG) << "switch from sched to fiber[" << fiber->Seq() << "]";
@@ -61,11 +60,12 @@ void XFiber::Dispatch() {
                     delete fiber;
                 }
             }
-            ready.clear();
+            running_fibers_.clear();
         }
 
-        struct epoll_event evs[512];
-        int n = epoll_wait(efd_, evs, 512, 10);
+        #define MAX_EVENT_COUNT 512
+        struct epoll_event evs[MAX_EVENT_COUNT];
+        int n = epoll_wait(efd_, evs, MAX_EVENT_COUNT, 2);
         if (n < 0) {
             perror("epoll_wait");
             exit(-1);
@@ -80,7 +80,7 @@ void XFiber::Dispatch() {
                 WaitingFibers &waiting_fibers = fiber_iter->second;
                 if (ev.events & EPOLLIN) {
                     // wakeup
-                    LOG(DENUG) << "waiting fd[" << fd << "] has fired IN event, wake up pending fiber[" << waiting_fibers.r_->Seq() << "]";
+                    LOG(DEBUG) << "waiting fd[" << fd << "] has fired IN event, wake up pending fiber[" << waiting_fibers.r_->Seq() << "]";
                     ready_fibers_.push_back(waiting_fibers.r_);
                 }
                 else if (ev.events & EPOLLOUT) {
@@ -88,7 +88,7 @@ void XFiber::Dispatch() {
                         LOG(WARNING) << "fd[" << fd << "] has been fired OUT event, but not found any fiber to handle!";
                     }
                     else {
-                        LOG(DENUG) << "waiting fd[" << fd << "] has fired OUT event, wake up pending fiber[" << waiting_fibers.w_->Seq() << "]";
+                        LOG(DEBUG) << "waiting fd[" << fd << "] has fired OUT event, wake up pending fiber[" << waiting_fibers.w_->Seq() << "]";
                         ready_fibers_.push_back(waiting_fibers.w_);
                     }
                 }
@@ -175,29 +175,31 @@ bool XFiber::UnregisterFdFromSched(int fd) {
 
 thread_local uint64_t fiber_seq = 0;
 
-Fiber::Fiber(std::function<void ()> run, size_t stack_size, std::string fiber_name) {
+Fiber::Fiber(std::function<void ()> run, XFiber *xfiber, size_t stack_size, std::string fiber_name) {
     run_ = run;
+    xfiber_ = xfiber;
     fiber_name_ = fiber_name;
     stack_size_ = stack_size;
     stack_ptr_ = new uint8_t[stack_size_];
+    
+    getcontext(&ctx_);
+    ctx_.uc_stack.ss_sp = stack_ptr_;
+    ctx_.uc_stack.ss_size = stack_size_;
+    ctx_.uc_link = xfiber->SchedCtx();
+    makecontext(&ctx_, (void (*)())Fiber::Start, 1, this);
+
     seq_ = fiber_seq++;
     status_ = FiberStatus::INIT;
 }
 
 Fiber::~Fiber() {
+    delete []stack_ptr_;
+    stack_ptr_ = nullptr;
+    stack_size_ = 0;
 }
     
 uint64_t Fiber::Seq() {
     return seq_;
-}
-
-void Fiber::SetXFiber(XFiber *xfiber) {
-    assert(getcontext(&ctx_) == 0);
-
-    ctx_.uc_stack.ss_sp = stack_ptr_;
-    ctx_.uc_stack.ss_size = stack_size_;
-    ctx_.uc_link = xfiber->SchedCtx();
-    makecontext(&ctx_, (void (*)())Fiber::Start, 1, this);
 }
 
 ucontext_t *Fiber::Ctx() {
@@ -217,5 +219,4 @@ std::string Fiber::Name() {
 bool Fiber::IsFinished() {
     return status_ == FiberStatus::FINISHED;
 }
-
 

@@ -54,6 +54,8 @@ private:
     
     std::deque<Fiber *> ready_fibers_;
 
+    std::deque<Fiber *> running_fibers_;
+
     ucontext_t sched_ctx_;
 
     Fiber *curr_fiber_;
@@ -75,7 +77,7 @@ private:
 class Fiber
 {
 public:
-    Fiber(std::function<void ()> run, size_t stack_size, std::string fiber_name);
+    Fiber(std::function<void ()> run, XFiber *xfiber, size_t stack_size, std::string fiber_name);
 
     ~Fiber();
 
@@ -84,8 +86,6 @@ public:
     std::string Name();
 
     bool IsFinished();
-
-    void SetXFiber(XFiber *xfiber);
     
     void Run();
 
@@ -97,12 +97,19 @@ public:
 
 private:
     uint64_t seq_;
+
     XFiber *xfiber_;
+
     std::string fiber_name_;
+
     FiberStatus status_;
+
     ucontext_t ctx_;
+
     uint8_t *stack_ptr_;
+
     size_t stack_size_;
+    
     std::function<void ()> run_;
 };
 

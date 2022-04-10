@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include <cstdio>
 #include <sstream>
 #include <string>
@@ -16,10 +15,8 @@ public:
     }
 
     ~XFiberLog() {
-        stream_ << std::endl;
         std::string str_newline(stream_.str());
-        fprintf(stderr, "%s", str_newline.c_str());
-        fflush(stderr);
+        fprintf(stderr, "%s\n", str_newline.c_str());
     }
 
     std::ostream& stream() { return stream_;}
