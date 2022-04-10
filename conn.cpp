@@ -39,7 +39,7 @@ ssize_t Connection::Write(const char *buf, size_t sz, int timeout_ms) const {
             else if (errno == EAGAIN) {
                 LOG(DEBUG) << "write to fd[" << fd_ << "] "
                               "return EAGIN, add fd into IO waiting events and switch to sched";
-                xfiber->RegisterFdToSchedWithFiber(fd_, xfiber->CurrFiber(), 1);
+                xfiber->RegisterFdToCurrFiber(fd_, true);
                 xfiber->SwitchToSchedFiber();
             }
             else {
@@ -73,7 +73,7 @@ ssize_t Connection::Read(char *buf, size_t sz, int timeout_ms) const {
             else if (errno == EAGAIN) {
                 LOG(DEBUG) << "read from fd[" << fd_ << "] "
                               "return EAGIN, add fd into IO waiting events and switch to sched";
-                xfiber->RegisterFdToSchedWithFiber(fd_, xfiber->CurrFiber(), 0);
+                xfiber->RegisterFdToCurrFiber(fd_, false);
                 xfiber->SwitchToSchedFiber();
             }
             else if (errno == EINTR) {

@@ -13,7 +13,7 @@
 
 XFiber::XFiber() {
     curr_fiber_ = nullptr;
-    efd_ = epoll_create1(1024);
+    efd_ = epoll_create1(0);
     if (efd_ < 0) {
         perror("epoll_create");
         exit(-1);
@@ -110,21 +110,21 @@ void XFiber::SwitchToSchedFiber() {
     assert(swapcontext(curr_fiber_->Ctx(), SchedCtx()) == 0);
 }
 
-bool XFiber::RegisterFdToSchedWithFiber(int fd, Fiber *fiber, int is_write) {
+bool XFiber::RegisterFdToCurrFiber(int fd, bool is_write) {
     /*
         op = 0 读
         op = 1 写
     */
-   assert(fiber != nullptr);
+   assert(curr_fiber_ != nullptr);
     auto iter = io_waiting_fibers_.find(fd);
     if (iter == io_waiting_fibers_.end()) {
         WaitingFibers wf;
-        if (is_write == 0) { // 读
-            wf.r_ = fiber;
+        if (!is_write) { // 读
+            wf.r_ = curr_fiber_;
             io_waiting_fibers_.insert(std::make_pair(fd, wf));
         }
         else {
-            wf.w_ = fiber;
+            wf.w_ = curr_fiber_;
             io_waiting_fibers_.insert(std::make_pair(fd, wf));
         }
         struct epoll_event ev;
@@ -138,16 +138,17 @@ bool XFiber::RegisterFdToSchedWithFiber(int fd, Fiber *fiber, int is_write) {
         LOG(DEBUG) << "add fd[" << fd << "] into epoll event success";
     }
     else {
-        if (is_write == 0) {
-            iter->second.r_ = fiber;
+        if (!is_write) {
+            iter->second.r_ = curr_fiber_;
         }
         else {
-            iter->second.w_ = fiber;
+            iter->second.w_ = curr_fiber_;
         }
     }
 
     return true;
 }
+
 
 bool XFiber::UnregisterFdFromSched(int fd) {
     auto iter = io_waiting_fibers_.find(fd);

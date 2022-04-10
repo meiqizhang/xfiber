@@ -63,7 +63,7 @@ std::shared_ptr<Connection> Listener::Accept() {
         else {
             if (errno == EAGAIN) {
                 // accept失败，协程切出
-                xfiber->RegisterFdToSchedWithFiber(fd_, xfiber->CurrFiber(), 0);
+                xfiber->RegisterFdToCurrFiber(fd_, false);
                 xfiber->SwitchToSchedFiber();
             }
             else if (errno == EINTR) {

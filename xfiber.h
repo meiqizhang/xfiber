@@ -18,6 +18,7 @@ typedef enum {
 }FiberStatus;
 
 class Fiber;
+
 class XFiber {
 public:
     XFiber();
@@ -34,7 +35,7 @@ public:
 
     void SwitchToSchedFiber();
 
-    bool RegisterFdToSchedWithFiber(int fd, Fiber *fiber, int op);
+    bool RegisterFdToCurrFiber(int fd, bool is_write);
 
     bool UnregisterFdFromSched(int fd);
 
@@ -43,10 +44,6 @@ public:
     static XFiber *xfiber() {
         static thread_local XFiber xf;
         return &xf;
-    }
-
-    inline Fiber *CurrFiber() {
-        return curr_fiber_;
     }
 
 private:
