@@ -5,6 +5,8 @@
 #include <inttypes.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>

@@ -11,7 +11,7 @@ TARGET = main
 BIN_TARGET = ${DIR_BIN}/${TARGET}
 
 CC = g++
-CFLAGS = -std=c++11 -g -Wall -I${DIR_INC}
+CFLAGS = -std=c++11 -O2 -g -Wall -I${DIR_INC}
 
 ${BIN_TARGET}:${OBJ}
 	$(CC) $(OBJ) -o $@

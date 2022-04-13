@@ -72,6 +72,13 @@ std::shared_ptr<Connection> Listener::Accept() {
                 perror("fcntl");
                 exit(-1);
             }
+            int nodelay = 1;
+            if (setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) < 0) {
+                perror("setsockopt tcp_nodelay");
+                close(client_fd);
+                client_fd = -1;
+            }
+
             return std::shared_ptr<Connection>(new Connection(client_fd));
         }
         else {
