@@ -84,10 +84,6 @@ public:
 
     bool IsFinished();
     
-    void Run();
-
-    void Yield();
-
     uint64_t Seq();
 
     static void Start(Fiber *fiber);
