@@ -40,11 +40,11 @@ public:
 
     void Yield();
 
-    void SwitchToSchedFiber();
+    void SwitchToSched();
 
-    bool RegisterFdToCurrFiber(int fd, bool is_write);
+    bool RegisterFd(int fd, bool is_write);
 
-    bool UnregisterFdFromSched(int fd);
+    bool UnregisterFd(int fd);
 
     XFiberCtx *SchedCtx();
 

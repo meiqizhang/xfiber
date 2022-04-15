@@ -101,16 +101,16 @@ void XFiber::Yield() {
     assert(curr_fiber_ != nullptr);
     // 主动切出的后仍然是ready状态，等待下次调度
     ready_fibers_.push_back(curr_fiber_);
-    SwitchToSchedFiber();
+    SwitchToSched();
 }
 
-void XFiber::SwitchToSchedFiber() {
+void XFiber::SwitchToSched() {
     assert(curr_fiber_ != nullptr);
     LOG(DEBUG) << "swicth to sched";
     assert(SwitchCtx(curr_fiber_->Ctx(), SchedCtx()) == 0);
 }
 
-bool XFiber::RegisterFdToCurrFiber(int fd, bool is_write) {
+bool XFiber::RegisterFd(int fd, bool is_write) {
     /*
         op = 0 读
         op = 1 写
@@ -150,7 +150,7 @@ bool XFiber::RegisterFdToCurrFiber(int fd, bool is_write) {
 }
 
 
-bool XFiber::UnregisterFdFromSched(int fd) {
+bool XFiber::UnregisterFd(int fd) {
     auto iter = io_waiting_fibers_.find(fd);
     if (iter != io_waiting_fibers_.end()) {
         io_waiting_fibers_.erase(iter);

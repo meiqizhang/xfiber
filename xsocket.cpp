@@ -84,8 +84,8 @@ std::shared_ptr<Connection> Listener::Accept() {
         else {
             if (errno == EAGAIN) {
                 // accept失败，协程切出
-                xfiber->RegisterFdToCurrFiber(fd_, false);
-                xfiber->SwitchToSchedFiber();
+                xfiber->RegisterFd(fd_, false);
+                xfiber->SwitchToSched();
             }
             else if (errno == EINTR) {
                 LOG(INFO) << "accept client connect return interrupt error, ignore and conitnue...";
@@ -108,7 +108,7 @@ Connection::Connection(int fd) {
 }
 
 Connection::~Connection() {
-    XFiber::xfiber()->UnregisterFdFromSched(fd_);
+    XFiber::xfiber()->UnregisterFd(fd_);
     LOG(INFO) << "close fd[" << fd_ << "]";
     close(fd_);
     fd_ = -1;
@@ -137,8 +137,8 @@ ssize_t Connection::Write(const char *buf, size_t sz, int timeout_ms) const {
             else if (errno == EAGAIN) {
                 LOG(DEBUG) << "write to fd[" << fd_ << "] "
                               "return EAGIN, add fd into IO waiting events and switch to sched";
-                xfiber->RegisterFdToCurrFiber(fd_, true);
-                xfiber->SwitchToSchedFiber();
+                xfiber->RegisterFd(fd_, true);
+                xfiber->SwitchToSched();
             }
             else {
                 //pass
@@ -171,8 +171,8 @@ ssize_t Connection::Read(char *buf, size_t sz, int timeout_ms) const {
             else if (errno == EAGAIN) {
                 LOG(DEBUG) << "read from fd[" << fd_ << "] "
                               "return EAGIN, add fd into IO waiting events and switch to sched";
-                xfiber->RegisterFdToCurrFiber(fd_, false);
-                xfiber->SwitchToSchedFiber();
+                xfiber->RegisterFd(fd_, false);
+                xfiber->SwitchToSched();
             }
             else if (errno == EINTR) {
                 //pass
