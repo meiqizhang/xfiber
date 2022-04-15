@@ -3,6 +3,9 @@ DIR_SRC = ./
 DIR_OBJ = ./obj
 DIR_BIN = ./bin
 
+$(shell if [ ! -e ${DIR_OBJ} ];then mkdir -p ${DIR_OBJ}; fi)
+$(shell if [ ! -e ${DIR_BIN} ];then mkdir -p ${DIR_BIN}; fi)
+
 SRC = $(wildcard ${DIR_SRC}/*.cpp)
 OBJ = $(patsubst %.cpp,${DIR_OBJ}/%.o,$(notdir ${SRC}))
 

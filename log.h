@@ -5,23 +5,47 @@
 #include <string>
 
 #define LOG(level) \
-    XFiberLog(__FILE__, __LINE__, __FUNCTION__, __DATE__, __TIME__).stream()
+    XFiber##level(__FILE__, __LINE__, __FUNCTION__, __DATE__, __TIME__).stream()
 
 
-class XFiberLog{
+class BaseLog{
 public:
-    XFiberLog(const char* file, int line,const char* function, const char* date, const char* time) {
-        stream_ << "[" << date << " " << time << "][" << file <<" - " << function << ":" << line << "] [INFO] - ";
-    }
-
-    ~XFiberLog() {
+    ~BaseLog() {
         std::string str_newline(stream_.str());
         fprintf(stderr, "%s\n", str_newline.c_str());
     }
 
-    std::ostream& stream() { return stream_;}
-
-private:
+    std::ostream& stream() {
+         return stream_;
+    }
 
     std::ostringstream stream_;
+};
+
+class XFiberDEBUG : public BaseLog {
+public:
+    XFiberDEBUG(const char* file, int line,const char* function, const char* date, const char* time) {
+        stream_ << "[D] [" << date << " " << time << "][" << file <<" - " << function << ":" << line << "] - ";
+    }
+};
+
+class XFiberINFO : public BaseLog {
+public:
+    XFiberINFO(const char* file, int line,const char* function, const char* date, const char* time) {
+        stream_ << "[I] [" << date << " " << time << "][" << file <<" - " << function << ":" << line << "] - ";
+    }
+};
+
+class XFiberWARNING : public BaseLog {
+public:
+    XFiberWARNING(const char* file, int line,const char* function, const char* date, const char* time) {
+        stream_ << "[W] [" << date << " " << time << "][" << file <<" - " << function << ":" << line << "] - ";
+    }
+};
+
+class XFiberERROR : public BaseLog {
+public:
+    XFiberERROR(const char* file, int line,const char* function, const char* date, const char* time) {
+        stream_ << "[E] [" << date << " " << time << "][" << file <<" - " << function << ":" << line << "] - ";
+    }
 };

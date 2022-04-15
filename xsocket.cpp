@@ -146,7 +146,7 @@ ssize_t Connection::Write(const char *buf, size_t sz, int timeout_ms) const {
         }
 
     }
-    LOG(DEBU) << "write to fd[" << fd_ << "] for " << sz << " byte(s) success";
+    LOG(DEBUG) << "write to fd[" << fd_ << "] for " << sz << " byte(s) success";
     return 0;
 }
 
