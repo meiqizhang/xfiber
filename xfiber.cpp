@@ -24,7 +24,7 @@ XFiber::~XFiber() {
     close(efd_);
 }
 
-ucontext_t *XFiber::SchedCtx() {
+XFiberCtx *XFiber::SchedCtx() {
     return &sched_ctx_;
 }
 
@@ -38,7 +38,7 @@ void XFiber::CreateFiber(std::function<void ()> run, size_t stack_size, std::str
     }
     Fiber *fiber = new Fiber(run, this, stack_size, fiber_name);
     ready_fibers_.push_back(fiber);
-    LOG(DEBUG) << "create a new fiber with id[" << fiber->Seq() << "]" << fiber;
+    LOG(DEBUG) << "create a new fiber with id[" << fiber->Seq() << "]";
 }
 
 void XFiber::Dispatch() {
@@ -52,7 +52,7 @@ void XFiber::Dispatch() {
                 Fiber *fiber = *iter;
                 curr_fiber_ = fiber;
                 LOG(DEBUG) << "switch from sched to fiber[" << fiber->Seq() << "]";
-                assert(swapcontext(SchedCtx(), fiber->Ctx()) == 0);
+                assert(SwitchCtx(SchedCtx(), fiber->Ctx()) == 0);
                 curr_fiber_ = nullptr;
 
                 if (fiber->IsFinished()) {
@@ -107,7 +107,7 @@ void XFiber::Yield() {
 void XFiber::SwitchToSchedFiber() {
     assert(curr_fiber_ != nullptr);
     LOG(DEBUG) << "swicth to sched";
-    assert(swapcontext(curr_fiber_->Ctx(), SchedCtx()) == 0);
+    assert(SwitchCtx(curr_fiber_->Ctx(), SchedCtx()) == 0);
 }
 
 bool XFiber::RegisterFdToCurrFiber(int fd, bool is_write) {
@@ -168,7 +168,7 @@ bool XFiber::UnregisterFdFromSched(int fd) {
         LOG(ERROR) << "unregister fd[" << fd << "] from epoll efd[" << efd_ << "] failed, msg=" << strerror(errno);
     }
     else {
-        LOG(ERROR) << "unregister fd[" << fd << "] from epoll efd[" << efd_ << "] success!";
+        LOG(INFO) << "unregister fd[" << fd << "] from epoll efd[" << efd_ << "] success!";
     }
     return true;
 }
@@ -203,7 +203,7 @@ uint64_t Fiber::Seq() {
     return seq_;
 }
 
-ucontext_t *Fiber::Ctx() {
+XFiberCtx *Fiber::Ctx() {
     return &ctx_;
 }
 

@@ -17,6 +17,13 @@ typedef enum {
     FINISHED = 3
 }FiberStatus;
 
+typedef struct ucontext_t XFiberCtx;
+
+
+#define SwitchCtx(from, to) \
+    swapcontext(from, to)
+
+
 class Fiber;
 
 class XFiber {
@@ -39,7 +46,7 @@ public:
 
     bool UnregisterFdFromSched(int fd);
 
-    ucontext_t *SchedCtx();
+    XFiberCtx *SchedCtx();
 
     static XFiber *xfiber() {
         static thread_local XFiber xf;
@@ -53,7 +60,7 @@ private:
 
     std::deque<Fiber *> running_fibers_;
 
-    ucontext_t sched_ctx_;
+    XFiberCtx sched_ctx_;
 
     Fiber *curr_fiber_;
 
@@ -78,7 +85,7 @@ public:
 
     ~Fiber();
 
-    ucontext_t* Ctx();
+    XFiberCtx *Ctx();
 
     std::string Name();
 
