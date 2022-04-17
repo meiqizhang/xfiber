@@ -20,7 +20,7 @@ int main() {
     signal(SIGINT, sigint_action);
 
     XFiber *xfiber = XFiber::xfiber();
-    /*xfiber->AddTask([&]() {
+    /*xfiber->CreateFiber([&]() {
         cout << "hello world 11" << endl;
         xfiber->Yield();
         cout << "hello world 12" << endl;
@@ -30,12 +30,14 @@ int main() {
         cout << "hello world 14" << endl;
         cout << "hello world 15" << endl;
 
-    }, 0, "f1");
+    }, 0, "f1");*/
 
-    xfiber->AddTask([]() {
+    xfiber->CreateFiber([&]() {
         cout << "hello world 2" << endl;
+        xfiber->SleepMs(1000);
+        cout << "hello world 3 after 1000ms" << endl;
+
     }, 0, "f2");
-    */
 
     xfiber->CreateFiber([&]{
         Listener listener = Listener::ListenTCP(6379);
@@ -44,8 +46,9 @@ int main() {
             xfiber->CreateFiber([conn] {
                 while (true) {
                     char recv_buf[512];
-                    int n = conn->Read(recv_buf, 512);
+                    int n = conn->Read(recv_buf, 512, 2000);
                     if (n <= 0) {
+                        cout << "read failed" << endl;
                         break;
                     }
                     recv_buf[n] = '\0';

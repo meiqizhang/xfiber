@@ -1,5 +1,6 @@
 #include "xsocket.h"
 #include "xfiber.h"
+#include "util.h"
 
 
 uint32_t Fd::next_seq_ = 0;
@@ -37,9 +38,15 @@ Listener Listener::ListenTCP(uint16_t port) {
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     int flag = 1;
-    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag)) < 0) {
+        perror("setsockopt SO_REUSEADDR");
+        exit(0);
+    }
 
-    fcntl(fd, F_SETFL, O_NONBLOCK);
+    if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0) {
+        perror("fcntl O_NONBLOCK");
+        exit(0);
+    }
 
     //bind
     if (bind(fd, (sockaddr *)&addr, sizeof(sockaddr_in)) < 0) {
@@ -53,6 +60,7 @@ Listener Listener::ListenTCP(uint16_t port) {
         exit(-1);
     }
 
+    LOG(INFO) << "listen port [" << port << "] success";
     Listener listener;
     listener.FromRawFd(fd);
     return listener;
@@ -84,7 +92,7 @@ std::shared_ptr<Connection> Listener::Accept() {
         else {
             if (errno == EAGAIN) {
                 // accept失败，协程切出
-                xfiber->RegisterFd(fd_, false);
+                xfiber->RegisterFd(fd_, false, 0);
                 xfiber->SwitchToSched();
             }
             else if (errno == EINTR) {
@@ -108,7 +116,9 @@ Connection::Connection(int fd) {
 }
 
 Connection::~Connection() {
-    XFiber::xfiber()->UnregisterFd(fd_);
+    XFiber::xfiber()->UnregisterFd(fd_, false);
+    XFiber::xfiber()->UnregisterFd(fd_, true);
+
     LOG(INFO) << "close fd[" << fd_ << "]";
     close(fd_);
     fd_ = -1;
@@ -116,6 +126,7 @@ Connection::~Connection() {
 
 
 ssize_t Connection::Write(const char *buf, size_t sz, int timeout_ms) const {
+    int64_t expired_at = NowMs() + timeout_ms;
     size_t write_bytes = 0;
     XFiber *xfiber = XFiber::xfiber();
 
@@ -135,9 +146,14 @@ ssize_t Connection::Write(const char *buf, size_t sz, int timeout_ms) const {
                 return -1;
             }
             else if (errno == EAGAIN) {
+                if (timeout_ms > 0 && expired_at < NowMs()) {
+                    LOG(WARNING) << "write [" << fd_ << "] timeout";
+                    return -1; 
+                }
+
                 LOG(DEBUG) << "write to fd[" << fd_ << "] "
                               "return EAGIN, add fd into IO waiting events and switch to sched";
-                xfiber->RegisterFd(fd_, true);
+                xfiber->RegisterFd(fd_, true, timeout_ms);
                 xfiber->SwitchToSched();
             }
             else {
@@ -151,6 +167,7 @@ ssize_t Connection::Write(const char *buf, size_t sz, int timeout_ms) const {
 }
 
 ssize_t Connection::Read(char *buf, size_t sz, int timeout_ms) const {
+    int64_t expired_at = NowMs() + timeout_ms;
     XFiber *xfiber = XFiber::xfiber();
 
     while (true) {
@@ -169,9 +186,13 @@ ssize_t Connection::Read(char *buf, size_t sz, int timeout_ms) const {
                 return -1;
             }
             else if (errno == EAGAIN) {
+                if (timeout_ms > 0 && expired_at < NowMs()) {
+                    LOG(WARNING) << "read [" << fd_ << "] timeout";
+                    return -1; 
+                }
                 LOG(DEBUG) << "read from fd[" << fd_ << "] "
                               "return EAGIN, add fd into IO waiting events and switch to sched";
-                xfiber->RegisterFd(fd_, false);
+                xfiber->RegisterFd(fd_, false, timeout_ms);
                 xfiber->SwitchToSched();
             }
             else if (errno == EINTR) {
