@@ -22,6 +22,8 @@ public:
 
     int RawFd();
 
+    bool Available();
+
 protected:
     int fd_;
 
@@ -56,6 +58,8 @@ public:
     Connection(int fd);
 
     ~Connection();
+
+    static std::shared_ptr<Connection> ConnectTCP(const char *ipv4, uint16_t port);
 
     ssize_t Write(const char *buf, size_t sz, int timeout_ms=-1) const;
 

@@ -1,14 +1,13 @@
 #pragma once
 
-#include <map>
 #include <set>
+#include <map>
 #include <list>
 #include <queue>
 #include <vector>
 #include <string>
 #include <functional>
 #include <ucontext.h>
-#include <sys/time.h>
 
 #include "log.h"
 
@@ -42,13 +41,11 @@ public:
 
     void Yield();
 
-    void SleepMs(int ms);
-
     void SwitchToSched();
 
-    bool RegisterFd(int fd, bool is_write, int timeout_ms);
+    bool RegisterFd(int fd, int64_t expired_at, bool is_write);
 
-    void UnregisterFd(int fd, bool is_write);
+    bool UnregisterFd(int fd);
 
     XFiberCtx *SchedCtx();
 
@@ -68,40 +65,19 @@ private:
 
     Fiber *curr_fiber_;
 
-    struct WaitingFibers {
+    struct WaitingFiber {
         Fiber *r_, *w_;
-        int64_t r_expired_at_, w_expired_at_;
-
-        WaitingFibers() {
+        WaitingFiber() {
             r_ = nullptr;
             w_ = nullptr;
-            r_expired_at_ = -1;
-            w_expired_at_ = -1;
         }
     };
 
-    std::map<int, WaitingFibers> io_waiting_fibers_;
-
+    std::map<int, WaitingFiber> io_waiting_fibers_;
     // 会不会出现一个fd的读/写被多个协程监听？？不会！
     // 但是一个fiber可能会监听多个fd，实际也不存在，一个连接由一个协程处理
 
-    struct ExpireEvents {
-        Fiber *r_, *w_;
-        Fiber *curr_;
-        int fd_;
-
-        ExpireEvents() {
-            r_ = nullptr;
-            w_ = nullptr;
-            curr_ = nullptr;
-            fd_ = -1;
-        }
-        bool operator < (const ExpireEvents &other) const {
-            return r_ < other.r_ && w_ < other.w_ && curr_ < other.curr_ && fd_ < other.fd_;
-        }
-
-    };
-    std::map<uint64_t, std::set<ExpireEvents>> expire_fibers_;
+    std::map<int64_t, std::set<Fiber *>> expired_events_;
 };
 
 
@@ -122,6 +98,48 @@ public:
 
     static void Start(Fiber *fiber);
 
+    struct WaitingFd {
+        int fd_;
+        int64_t expired_at_;
+
+        WaitingFd(int fd =-1, int64_t expired_at=-1) {
+            fd_ = fd;
+            expired_at_ = expired_at;
+        }
+    };
+
+    struct WaitingEvents {
+        // 一个协程中监听的fd不会太多，所以直接用数组
+        std::vector<WaitingFd> waiting_fds_r_;
+        std::vector<WaitingFd> waiting_fds_w_;
+    };
+
+    WaitingEvents &GetWaitingEvents() {
+        return waiting_events_;
+    }
+
+    void SetReadEvent(const WaitingFd &waiting_fd) {
+        for (size_t i = 0; i < waiting_events_.waiting_fds_r_.size(); ++i) {
+            if (waiting_events_.waiting_fds_r_[i].fd_ == waiting_fd.fd_) {
+                waiting_events_.waiting_fds_r_[i].expired_at_ = waiting_fd.expired_at_;
+                return ;
+            }
+        }
+        waiting_events_.waiting_fds_r_.push_back(waiting_fd);
+    }
+
+    void SetWriteEvent(const WaitingFd &waiting_fd) {
+        for (size_t i = 0; i < waiting_events_.waiting_fds_w_.size(); ++i) {
+            if (waiting_events_.waiting_fds_w_[i].fd_ == waiting_fd.fd_) {
+                waiting_events_.waiting_fds_w_[i].expired_at_ = waiting_fd.expired_at_;
+                return ;
+            }
+        }
+        waiting_events_.waiting_fds_w_.push_back(waiting_fd);
+    }
+
+
+
 private:
     uint64_t seq_;
 
@@ -138,4 +156,8 @@ private:
     size_t stack_size_;
     
     std::function<void ()> run_;
+
+    WaitingEvents waiting_events_;
+
 };
+
