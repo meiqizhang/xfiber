@@ -52,11 +52,6 @@ void XFiber::WakeupFiber(Fiber *fiber) {
         }
     }
 
-    for (auto iter : waiting_fds) {
-        if (epoll_ctl(efd_, EPOLL_CTL_DEL, iter, nullptr) < 0) {
-            LOG(ERROR) << "remove fd[" << iter << "] from epoll failed, msg=" << strerror(errno);
-        }
-    }
     // 3. 从超时队列中删除
     // for (auto fd: waiting_fds) {
     //     auto iter = expired_events_.find(fd);
@@ -80,7 +75,7 @@ void XFiber::Dispatch() {
         if (ready_fibers_.size() > 0) {
             running_fibers_ = std::move(ready_fibers_);
             ready_fibers_.clear();
-            LOG(DEBUG) << "There are " << running_fibers_.size() << " fiber(s) in ready list, ready to run...";
+            LOG(DEBUG) << "there are " << running_fibers_.size() << " fiber(s) in ready list, ready to run...";
 
             for (auto iter = running_fibers_.begin(); iter != running_fibers_.end(); iter++) {
                 Fiber *fiber = *iter;
@@ -101,8 +96,8 @@ void XFiber::Dispatch() {
         struct epoll_event evs[MAX_EVENT_COUNT];
         int n = epoll_wait(efd_, evs, MAX_EVENT_COUNT, 2);
         if (n < 0) {
-            perror("epoll_wait");
-            exit(-1);
+            LOG(ERROR) << "epoll_wait erorr, msg=" << strerror(errno);
+            continue;
         }
 
         for (int i = 0; i < n; i++) {
@@ -113,7 +108,6 @@ void XFiber::Dispatch() {
             if (fiber_iter != io_waiting_fibers_.end()) {
                 WaitingFiber &waiting_fiber = fiber_iter->second;
                 if (ev.events & EPOLLIN) {
-                    // wakeup
                     LOG(DEBUG) << "waiting fd[" << fd << "] has fired IN event, wake up pending fiber[" <<  waiting_fiber.r_->Seq() << "]";
                     WakeupFiber(waiting_fiber.r_);
                 }
@@ -144,7 +138,19 @@ void XFiber::SwitchToSched() {
     assert(SwitchCtx(curr_fiber_->Ctx(), SchedCtx()) == 0);
 }
 
-bool XFiber::RegisterFd(int fd, int64_t expired_at, bool is_write) {
+void XFiber::TakeOver(int fd) {
+    struct epoll_event ev;
+    ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
+    ev.data.fd = fd;
+
+    if (epoll_ctl(efd_, EPOLL_CTL_ADD, fd, &ev) < 0) {
+        LOG(ERROR) << "add fd [" << fd << "] into epoll failed, msg=" << strerror(errno);
+        exit(-1);
+    }
+    LOG(DEBUG) << "add fd[" << fd << "] into epoll event success";
+}
+
+bool XFiber::RegisterFdWithCurrFiber(int fd, int64_t expired_at, bool is_write) {
     /*
         op = 0 读
         op = 1 写
@@ -157,37 +163,26 @@ bool XFiber::RegisterFd(int fd, int64_t expired_at, bool is_write) {
         if (!is_write) { // 读
             wf.r_ = curr_fiber_;
             io_waiting_fibers_.insert(std::make_pair(fd, wf));
-            curr_fiber_->SetReadEvent(Fiber::WaitingFd(fd, expired_at));
+            curr_fiber_->SetReadEvent(Fiber::FdEvent(fd, expired_at));
         }
         else {
             wf.w_ = curr_fiber_;
             io_waiting_fibers_.insert(std::make_pair(fd, wf));
-            curr_fiber_->SetWriteEvent(Fiber::WaitingFd(fd, expired_at));
+            curr_fiber_->SetWriteEvent(Fiber::FdEvent(fd, expired_at));
         }
-        struct epoll_event ev;
-        ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
-        ev.data.fd = fd;
-
-        if (epoll_ctl(efd_, EPOLL_CTL_ADD, fd, &ev) < 0) {
-            LOG(ERROR) << "add fd [" << fd << "] into epoll failed, msg=" << strerror(errno);
-            exit(-1);
-        }
-        LOG(DEBUG) << "add fd[" << fd << "] into epoll event success";
     }
     else {
         if (!is_write) {
             iter->second.r_ = curr_fiber_;
-            curr_fiber_->SetReadEvent(Fiber::WaitingFd(fd, expired_at));
+            curr_fiber_->SetReadEvent(Fiber::FdEvent(fd, expired_at));
         }
         else {
             iter->second.w_ = curr_fiber_;
-            curr_fiber_->SetWriteEvent(Fiber::WaitingFd(fd, expired_at));
+            curr_fiber_->SetWriteEvent(Fiber::FdEvent(fd, expired_at));
         }
     }
-
     return true;
 }
-
 
 bool XFiber::UnregisterFd(int fd) {
     auto iter = io_waiting_fibers_.find(fd);
@@ -203,7 +198,6 @@ bool XFiber::UnregisterFd(int fd) {
     ev.data.fd = fd;
 
     if (epoll_ctl(efd_, EPOLL_CTL_DEL, fd, &ev) < 0) {
-        //exit(-1);
         LOG(ERROR) << "unregister fd[" << fd << "] from epoll efd[" << efd_ << "] failed, msg=" << strerror(errno);
     }
     else {

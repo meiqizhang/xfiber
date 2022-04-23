@@ -22,6 +22,11 @@ int Fd::RawFd() {
     return fd_;
 }
 
+void Fd::RegisterFdToSched() {
+    XFiber *xfiber = XFiber::xfiber();
+    xfiber->TakeOver(fd_);
+}
+
 Listener::Listener() {
 
 }
@@ -66,6 +71,10 @@ Listener Listener::ListenTCP(uint16_t port) {
 
     Listener listener;
     listener.FromRawFd(fd);
+
+    LOG(INFO) << "listen " << port << " success...";
+    XFiber::xfiber()->TakeOver(fd);
+
     return listener;
 }
 
@@ -89,13 +98,13 @@ std::shared_ptr<Connection> Listener::Accept() {
                 close(client_fd);
                 client_fd = -1;
             }
-
+            xfiber->TakeOver(client_fd);
             return std::shared_ptr<Connection>(new Connection(client_fd));
         }
         else {
             if (errno == EAGAIN) {
                 // accept失败，协程切出
-                xfiber->RegisterFd(fd_, -1, false);
+                xfiber->RegisterFdWithCurrFiber(fd_, -1, false);
                 xfiber->SwitchToSched();
             }
             else if (errno == EINTR) {
@@ -154,6 +163,8 @@ std::shared_ptr<Connection> Connection::ConnectTCP(const char *ipv4, uint16_t po
         return std::shared_ptr<Connection>(new Connection(-1));
     }
     LOG(DEBUG) << "connect " << ipv4 << ":" << port << " success with fd[" << fd << "]";
+    XFiber::xfiber()->TakeOver(fd);
+
     return std::shared_ptr<Connection>(new Connection(fd));
 }
 
@@ -179,7 +190,7 @@ ssize_t Connection::Write(const char *buf, size_t sz, int timeout_ms) const {
             else if (errno == EAGAIN) {
                 LOG(DEBUG) << "write to fd[" << fd_ << "] "
                               "return EAGIN, add fd into IO waiting events and switch to sched";
-                xfiber->RegisterFd(fd_, -1, true);
+                xfiber->RegisterFdWithCurrFiber(fd_, -1, true);
                 xfiber->SwitchToSched();
             }
             else {
@@ -213,7 +224,7 @@ ssize_t Connection::Read(char *buf, size_t sz, int timeout_ms) const {
             else if (errno == EAGAIN) {
                 LOG(DEBUG) << "read from fd[" << fd_ << "] "
                               "return EAGIN, add fd into IO waiting events and switch to sched";
-                xfiber->RegisterFd(fd_, -1, false);
+                xfiber->RegisterFdWithCurrFiber(fd_, -1, false);
                 xfiber->SwitchToSched();
             }
             else if (errno == EINTR) {

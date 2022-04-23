@@ -22,6 +22,8 @@ public:
 
     int RawFd();
 
+    void RegisterFdToSched();
+
     bool Available();
 
 protected:

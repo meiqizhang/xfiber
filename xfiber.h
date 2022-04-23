@@ -43,7 +43,9 @@ public:
 
     void SwitchToSched();
 
-    bool RegisterFd(int fd, int64_t expired_at, bool is_write);
+    void TakeOver(int fd);
+
+    bool RegisterFdWithCurrFiber(int fd, int64_t expired_at, bool is_write);
 
     bool UnregisterFd(int fd);
 
@@ -98,11 +100,11 @@ public:
 
     static void Start(Fiber *fiber);
 
-    struct WaitingFd {
+    struct FdEvent {
         int fd_;
         int64_t expired_at_;
 
-        WaitingFd(int fd =-1, int64_t expired_at=-1) {
+        FdEvent(int fd =-1, int64_t expired_at=-1) {
             fd_ = fd;
             expired_at_ = expired_at;
         }
@@ -110,32 +112,32 @@ public:
 
     struct WaitingEvents {
         // 一个协程中监听的fd不会太多，所以直接用数组
-        std::vector<WaitingFd> waiting_fds_r_;
-        std::vector<WaitingFd> waiting_fds_w_;
+        std::vector<FdEvent> waiting_fds_r_;
+        std::vector<FdEvent> waiting_fds_w_;
     };
 
     WaitingEvents &GetWaitingEvents() {
         return waiting_events_;
     }
 
-    void SetReadEvent(const WaitingFd &waiting_fd) {
+    void SetReadEvent(const FdEvent &fe) {
         for (size_t i = 0; i < waiting_events_.waiting_fds_r_.size(); ++i) {
-            if (waiting_events_.waiting_fds_r_[i].fd_ == waiting_fd.fd_) {
-                waiting_events_.waiting_fds_r_[i].expired_at_ = waiting_fd.expired_at_;
+            if (waiting_events_.waiting_fds_r_[i].fd_ == fe.fd_) {
+                waiting_events_.waiting_fds_r_[i].expired_at_ = fe.expired_at_;
                 return ;
             }
         }
-        waiting_events_.waiting_fds_r_.push_back(waiting_fd);
+        waiting_events_.waiting_fds_r_.push_back(fe);
     }
 
-    void SetWriteEvent(const WaitingFd &waiting_fd) {
+    void SetWriteEvent(const FdEvent &fe) {
         for (size_t i = 0; i < waiting_events_.waiting_fds_w_.size(); ++i) {
-            if (waiting_events_.waiting_fds_w_[i].fd_ == waiting_fd.fd_) {
-                waiting_events_.waiting_fds_w_[i].expired_at_ = waiting_fd.expired_at_;
+            if (waiting_events_.waiting_fds_w_[i].fd_ == fe.fd_) {
+                waiting_events_.waiting_fds_w_[i].expired_at_ = fe.expired_at_;
                 return ;
             }
         }
-        waiting_events_.waiting_fds_w_.push_back(waiting_fd);
+        waiting_events_.waiting_fds_w_.push_back(fe);
     }
 
 

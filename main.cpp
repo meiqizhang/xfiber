@@ -41,9 +41,9 @@ int main() {
         Listener listener = Listener::ListenTCP(7000);
         while (true) {
             shared_ptr<Connection> conn1 = listener.Accept();
-            shared_ptr<Connection> conn2 = Connection::ConnectTCP("127.0.0.1", 6379);
+            //shared_ptr<Connection> conn2 = Connection::ConnectTCP("127.0.0.1", 6379);
 
-            xfiber->CreateFiber([conn1, conn2] {
+            xfiber->CreateFiber([conn1] {
                 while (true) {
                     char recv_buf[512];
                     int n = conn1->Read(recv_buf, 512);
