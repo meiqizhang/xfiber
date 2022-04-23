@@ -53,12 +53,32 @@ void XFiber::WakeupFiber(Fiber *fiber) {
     }
 
     // 3. 从超时队列中删除
-    // for (auto fd: waiting_fds) {
-    //     auto iter = expired_events_.find(fd);
-    //     if (iter != expired_events_.end()) {
-    //         expired_events_.erase(iter);
-    //     }
-    // }
+    Fiber::WaitingEvents &evs = fiber->GetWaitingEvents();
+    for (size_t i = 0; i < evs.waiting_fds_r_.size(); i++) {
+        int64_t expired_at = evs.waiting_fds_r_[i].expired_at_;
+        if (expired_at > 0) {
+            auto expired_iter = expired_events_.find(expired_at);
+            if (expired_iter->second.find(fiber) == expired_iter->second.end()) {
+                LOG(ERROR) << "not fiber [" << fiber->Seq() << "] in expired events";
+            }
+            else {
+                expired_iter->second.erase(fiber);
+            }
+        }
+    }
+
+    for (size_t i = 0; i < evs.waiting_fds_w_.size(); i++) {
+        int64_t expired_at = evs.waiting_fds_w_[i].expired_at_;
+        if (expired_at > 0) {
+            auto expired_iter = expired_events_.find(expired_at);
+            if (expired_iter->second.find(fiber) == expired_iter->second.end()) {
+                LOG(ERROR) << "not fiber [" << fiber->Seq() << "] in expired events";
+            }
+            else {
+                expired_iter->second.erase(fiber);
+            }
+        }
+    }
 }
 
 void XFiber::CreateFiber(std::function<void ()> run, size_t stack_size, std::string fiber_name) {
@@ -90,6 +110,17 @@ void XFiber::Dispatch() {
                 }
             }
             running_fibers_.clear();
+        }
+
+        int64_t now_ms = util::NowMs();
+        while (!expired_events_.empty() && expired_events_.begin()->first <= now_ms) {
+            std::set<Fiber *> &expired_fibers = expired_events_.begin()->second;
+            while (!expired_fibers.empty()) {
+                std::set<Fiber *>::iterator expired_fiber = expired_fibers.begin();
+                WakeupFiber(*expired_fiber);
+                //expired_fibers.erase(expired_fiber);
+            }
+            expired_events_.erase(expired_events_.begin());
         }
 
         #define MAX_EVENT_COUNT 512
@@ -157,6 +188,10 @@ bool XFiber::RegisterFdWithCurrFiber(int fd, int64_t expired_at, bool is_write) 
     */
 
     assert(curr_fiber_ != nullptr);
+    if (expired_at > 0) {
+        expired_events_[expired_at].insert(curr_fiber_);
+    }
+
     auto iter = io_waiting_fibers_.find(fd);
     if (iter == io_waiting_fibers_.end()) {
         WaitingFiber wf;
@@ -187,10 +222,49 @@ bool XFiber::RegisterFdWithCurrFiber(int fd, int64_t expired_at, bool is_write) 
 bool XFiber::UnregisterFd(int fd) {
     auto iter = io_waiting_fibers_.find(fd);
     if (iter != io_waiting_fibers_.end()) {
+        WaitingFiber &waiting_fibers = iter->second;
+        Fiber *fiber_r = waiting_fibers.r_;
+        Fiber *fiber_w = waiting_fibers.w_;
+
+        if (fiber_r != nullptr) {
+            Fiber::WaitingEvents &evs_r = fiber_r->GetWaitingEvents();
+            for (size_t i = 0; i < evs_r.waiting_fds_r_.size(); i++) {
+                if (evs_r.waiting_fds_r_[i].fd_ == fd) {
+                    int64_t expired_at = evs_r.waiting_fds_r_[i].expired_at_;
+                    if (expired_at > 0) {
+                        auto expired_iter = expired_events_.find(expired_at);
+                        if (expired_iter->second.find(fiber_r) == expired_iter->second.end()) {
+                            LOG(ERROR) << "not fiber [" << fiber_r->Seq() << "] in expired events";
+                        }
+                        else {
+                            expired_iter->second.erase(fiber_r);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (fiber_w != nullptr) {
+            Fiber::WaitingEvents &evs_w = fiber_r->GetWaitingEvents();
+            for (size_t i = 0; i < evs_w.waiting_fds_w_.size(); i++) {
+                if (evs_w.waiting_fds_w_[i].fd_ == fd) {
+                    int64_t expired_at = evs_w.waiting_fds_w_[i].expired_at_;
+                    if (expired_at > 0) {
+                        auto expired_iter = expired_events_.find(expired_at);
+                        if (expired_iter->second.find(fiber_w) == expired_iter->second.end()) {
+                            LOG(ERROR) << "not fiber [" << fiber_w->Seq() << "] in expired events";
+                        }
+                        else {
+                            expired_iter->second.erase(fiber_r);
+                        }
+                    }
+                }
+            }
+        }
         io_waiting_fibers_.erase(iter);
     }
     else {
-        LOG(INFO) << "fd[" << fd << "] not registned into sched";
+        LOG(INFO) << "fd[" << fd << "] not register into sched";
     }
 
     struct epoll_event ev;

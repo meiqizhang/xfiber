@@ -10,6 +10,7 @@
 #include <ucontext.h>
 
 #include "log.h"
+#include "util.h"
 
 typedef enum {
     INIT = 0,
@@ -80,6 +81,8 @@ private:
     // 但是一个fiber可能会监听多个fd，实际也不存在，一个连接由一个协程处理
 
     std::map<int64_t, std::set<Fiber *>> expired_events_;
+
+    std::vector<Fiber *> finished_fibers_;
 };
 
 
@@ -105,6 +108,9 @@ public:
         int64_t expired_at_;
 
         FdEvent(int fd =-1, int64_t expired_at=-1) {
+            if (expired_at <= 0) {
+                expired_at = -1;
+            }
             fd_ = fd;
             expired_at_ = expired_at;
         }

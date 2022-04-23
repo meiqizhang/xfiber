@@ -46,7 +46,7 @@ int main() {
             xfiber->CreateFiber([conn1] {
                 while (true) {
                     char recv_buf[512];
-                    int n = conn1->Read(recv_buf, 512);
+                    int n = conn1->Read(recv_buf, 512, 5000);
                     if (n <= 0) {
                         break;
                     }
@@ -58,7 +58,10 @@ int main() {
                     cout << "recv from remote: " << rsp << endl;
                     conn1->Write(rsp, rsp_len);
                 #else
-                    conn1->Write("+OK\r\n", 5);
+                    if (conn1->Write("+OK\r\n", 5, 1000) <= 0) {
+                        printf("xsxs\n");
+                        break;
+                    }
                 #endif
                 }
             }, 0, "server");
