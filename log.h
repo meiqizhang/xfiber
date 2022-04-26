@@ -1,51 +1,47 @@
 #pragma once
 
 #include <cstdio>
-#include <sstream>
 #include <string>
 
-#define LOG(level) \
-    XFiber##level(__FILE__, __LINE__, __FUNCTION__, __DATE__, __TIME__).stream()
+#define DEBUG_ENABLE    1
+#define INFO_ENABLE     1
+#define WARNING_ENABLE  1
+#define ERROR_ENABLE    1
 
 
-class BaseLog{
-public:
-    ~BaseLog() {
-        std::string str_newline(stream_.str());
-        fprintf(stderr, "%s\n", str_newline.c_str());
-    }
+static std::string log_date() {
+    time_t     now = time(0);
+    struct tm  tstruct;
+    char       buf[80];
+    tstruct = *localtime(&now);
+    strftime(buf, sizeof(buf), "%Y-%m-%d.%X", &tstruct);
+    return buf;
+}
 
-    std::ostream& stream() {
-         return stream_;
-    }
+#ifndef __LOG_DATE__
+#define __LOG_DATE__ log_date().c_str()
+#endif
 
-    std::ostringstream stream_;
-};
+#if DEBUG_ENABLE
+#define LOG_DEBUG(fmt, args...)  fprintf(stderr, "[D][%s][%s %d] " fmt"\n", __LOG_DATE__, __FILE__, __LINE__, ##args);
+#else
+#define LOG_DEBUG(fmt, ...)
+#endif
 
-class XFiberDEBUG : public BaseLog {
-public:
-    XFiberDEBUG(const char* file, int line,const char* function, const char* date, const char* time) {
-        stream_ << "[D] [" << date << " " << time << "][" << file <<" - " << function << ":" << line << "] - ";
-    }
-};
+#if INFO_ENABLE
+#define LOG_INFO(fmt, args...)  fprintf(stderr, "[I][%s][%s %d] " fmt"\n", __LOG_DATE__, __FILE__, __LINE__, ##args);
+#else
+#define LOG_INFO(fmt, ...)
+#endif
 
-class XFiberINFO : public BaseLog {
-public:
-    XFiberINFO(const char* file, int line,const char* function, const char* date, const char* time) {
-        stream_ << "[I] [" << date << " " << time << "][" << file <<" - " << function << ":" << line << "] - ";
-    }
-};
+#if WARNING_ENABLE
+#define LOG_WARNING(fmt, args...)  fprintf(stderr, "[W][%s][%s %d] " fmt"\n", __LOG_DATE__, __FILE__, __LINE__, ##args);
+#else
+#define LOG_WARNING(fmt, ...)
+#endif
 
-class XFiberWARNING : public BaseLog {
-public:
-    XFiberWARNING(const char* file, int line,const char* function, const char* date, const char* time) {
-        stream_ << "[W] [" << date << " " << time << "][" << file <<" - " << function << ":" << line << "] - ";
-    }
-};
-
-class XFiberERROR : public BaseLog {
-public:
-    XFiberERROR(const char* file, int line,const char* function, const char* date, const char* time) {
-        stream_ << "[E] [" << date << " " << time << "][" << file <<" - " << function << ":" << line << "] - ";
-    }
-};
+#if ERROR_ENABLE
+#define LOG_ERROR(fmt, args...)  fprintf(stderr, "[E][%s][%s %d] " fmt"\n", __LOG_DATE__, __FILE__, __LINE__, ##args);
+#else
+#define LOG_ERROR(fmt, ...)
+#endif

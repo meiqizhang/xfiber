@@ -16,6 +16,10 @@ void sigint_action(int sig) {
     exit(0);    
 }
 
+// #define DEBUG_ENABLE
+#define DPRINT(fmt, args...) fprintf(stderr, "[D][%s %d] " fmt"\n", __FILE__, __LINE__, ##args);
+
+
 int main() {
     signal(SIGINT, sigint_action);
 
@@ -59,7 +63,6 @@ int main() {
                     conn1->Write(rsp, rsp_len);
                 #else
                     if (conn1->Write("+OK\r\n", 5, 1000) <= 0) {
-                        printf("xsxs\n");
                         break;
                     }
                 #endif

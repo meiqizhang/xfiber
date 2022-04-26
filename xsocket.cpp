@@ -48,31 +48,31 @@ Listener Listener::ListenTCP(uint16_t port) {
 
     int flag = 1;
     if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag)) < 0) {
-        LOG(ERROR) << "try set SO_REUSEADDR failed, msg=" << strerror(errno);
+        LOG_ERROR("try set SO_REUSEADDR failed, msg=%s", strerror(errno));
         exit(-1);
     }
 
     if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0) {
-        LOG(ERROR) << "set set listen fd O_NONBLOCK failed, msg=" << strerror(errno);
+        LOG_ERROR("set set listen fd O_NONBLOCK failed, msg=%s", strerror(errno));
         exit(-1);
     }
 
     //bind
     if (bind(fd, (sockaddr *)&addr, sizeof(sockaddr_in)) < 0) {
-        LOG(ERROR) << "try bind port [" << port << "] failed, msg=" << strerror(errno);
+        LOG_ERROR("try bind port [%d] failed, msg=%s", port, strerror(errno));
         exit(-1);
     }
 
     //listen
     if (listen(fd, 10) < 0) {
-        LOG(ERROR) << "try listen port[ " << port << "] failed, msg=" << strerror(errno);
+        LOG_ERROR("try listen port[%d] failed, msg=%s", port, strerror(errno));
         exit(-1);
     }
 
     Listener listener;
     listener.FromRawFd(fd);
 
-    LOG(INFO) << "listen " << port << " success...";
+    LOG_INFO("listen %d success...", port);
     XFiber::xfiber()->TakeOver(fd);
 
     return listener;
@@ -94,7 +94,7 @@ std::shared_ptr<Connection> Listener::Accept() {
             }
             int nodelay = 1;
             if (setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) < 0) {
-                LOG(ERROR) << "try set TCP_NODELAY failed, msg=" << strerror(errno);
+                LOG_ERROR("try set TCP_NODELAY failed, msg=%s", strerror(errno));
                 close(client_fd);
                 client_fd = -1;
             }
@@ -108,7 +108,7 @@ std::shared_ptr<Connection> Listener::Accept() {
                 xfiber->SwitchToSched();
             }
             else if (errno == EINTR) {
-                LOG(INFO) << "accept client connect return interrupt error, ignore and conitnue...";
+                LOG_INFO("accept client connect return interrupt error, ignore and conitnue...");
             }
             else {
                 perror("accept");
@@ -128,7 +128,7 @@ Connection::Connection(int fd) {
 
 Connection::~Connection() {
     XFiber::xfiber()->UnregisterFd(fd_);
-    LOG(INFO) << "close fd[" << fd_ << "]";
+    LOG_INFO("close fd[%d]", fd_);
     close(fd_);
     fd_ = -1;
 }
@@ -146,23 +146,23 @@ std::shared_ptr<Connection> Connection::ConnectTCP(const char *ipv4, uint16_t po
     //连接服务器，成功返回0，错误返回-1
     if (connect(fd, (struct sockaddr *)&svr_addr, sizeof(svr_addr)) < 0)
     {
-        LOG(ERROR) << "try connect " << ipv4 << ":" << port << " failed, msg=" << strerror(errno);
+        LOG_ERROR("try connect %s:%d failed, msg=%s", ipv4, port, strerror(errno));
         return std::shared_ptr<Connection>(new Connection(-1));
     }
 
     int nodelay = 1;
     if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) < 0) {
-        LOG(ERROR) << "try set TCP_NODELAY failed, msg=" << strerror(errno);
+        LOG_ERROR("try set TCP_NODELAY failed, msg=%s", strerror(errno));
         close(fd);
         return std::shared_ptr<Connection>(new Connection(-1));
     }
 
     if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0) {
-        LOG(ERROR) << "set set fd[" << fd << "] O_NONBLOCK failed, msg=" << strerror(errno);
+        LOG_ERROR("set set fd[%d] O_NONBLOCK failed, msg=%s", fd, strerror(errno));
         close(fd);
         return std::shared_ptr<Connection>(new Connection(-1));
     }
-    LOG(DEBUG) << "connect " << ipv4 << ":" << port << " success with fd[" << fd << "]";
+    LOG_DEBUG("connect %s:%d success with fd[%d]", ipv4, port, fd);
     XFiber::xfiber()->TakeOver(fd);
 
     return std::shared_ptr<Connection>(new Connection(fd));
@@ -177,24 +177,23 @@ ssize_t Connection::Write(const char *buf, size_t sz, int timeout_ms) const {
         int n = write(fd_, buf + write_bytes, sz - write_bytes);
         if (n > 0) {
             write_bytes += n;
-            LOG(DEBUG) << "write to fd[" << fd_ << "] return " << n << ", total send " << write_bytes << " bytes";
+            LOG_DEBUG("write to fd[%d] return %d, total send %ld bytes", fd_, n, write_bytes);
         }
         else if (n == 0) {
-            LOG(DEBUG) << "write to fd[" << fd_ << "] return 0 byte, peer has closed";
+            LOG_INFO("write to fd[%d] return 0 byte, peer has closed", fd_);
             return 0;
         }
         else {
             if (expired_at > 0 && util::NowMs() >= expired_at) {
-                LOG(WARNING) << "write to fd[" << fd_ << "] timeout after wait " << timeout_ms << "ms";
+                LOG_WARNING("write to fd[%d] timeout after wait %dms", fd_, timeout_ms);
                 return 0;
             }
             if (errno != EAGAIN && errno != EINTR) {
-                LOG(DEBUG) << "write to fd[" << fd_ << "] failed, msg=" << strerror(errno);
+                LOG_DEBUG("write to fd[%d] failed, msg=%s", fd_, strerror(errno));
                 return -1;
             }
             else if (errno == EAGAIN) {
-                LOG(DEBUG) << "write to fd[" << fd_ << "] "
-                              "return EAGIN, add fd into IO waiting events and switch to sched";
+                LOG_DEBUG("write to fd[%d] return EAGIN, add fd into IO waiting events and switch to sched", fd_);
                 xfiber->RegisterFdWithCurrFiber(fd_, expired_at, true);
                 xfiber->SwitchToSched();
             }
@@ -203,7 +202,7 @@ ssize_t Connection::Write(const char *buf, size_t sz, int timeout_ms) const {
             }
         }
     }
-    LOG(DEBUG) << "write to fd[" << fd_ << "] for " << sz << " byte(s) success";
+    LOG_DEBUG("write to fd[%d] for %ld byte(s) success", fd_, sz);
     return sz;
 }
 
@@ -213,26 +212,25 @@ ssize_t Connection::Read(char *buf, size_t sz, int timeout_ms) const {
 
     while (true) {
         int n = read(fd_, buf, sz);
-        LOG(DEBUG) << "read from fd[" << fd_ << "] reutrn " << n <<  " bytes";
+        LOG_DEBUG("read from fd[%d] reutrn %d bytes", fd_, n);
         if (n > 0) {
             return n;
         }
         else if (n == 0) {
-            LOG(DEBUG) << "read from fd[" << fd_ << "] return 0 byte, peer has closed";
+            LOG_DEBUG("read from fd[%d] return 0 byte, peer has closed", fd_);
             return 0;
         }
         else {
             if (expired_at > 0 && util::NowMs() >= expired_at) {
-                LOG(WARNING) << "read from fd[" << fd_ << "] timeout after wait " << timeout_ms << "ms";
+                LOG_WARNING("read from fd[%d] timeout after wait %dms", fd_, timeout_ms);
                 return 0;
             }
             if (errno != EAGAIN && errno != EINTR) {
-                LOG(DEBUG) << "read from fd[" << fd_ << "] failed, msg=" << strerror(errno);
+                LOG_DEBUG("read from fd[%d] failed, msg=%s", fd_, strerror(errno))
                 return -1;
             }
             else if (errno == EAGAIN) {
-                LOG(DEBUG) << "read from fd[" << fd_ << "] "
-                              "return EAGIN, add into waiting/expired events with expired at " << expired_at << " and switch to sched";
+                LOG_DEBUG("read from fd[%d] return EAGIN, add into waiting/expired events with expired at %ld  and switch to sched", fd_, expired_at);
                 xfiber->RegisterFdWithCurrFiber(fd_, expired_at, false);
                 xfiber->SwitchToSched();
             }
