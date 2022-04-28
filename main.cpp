@@ -41,6 +41,13 @@ int main() {
     }, 0, "f2");
     */
 
+    xfiber->CreateFiber([xfiber]{
+        for (int i = 0; i < 10; i++) {
+            cout << i << endl;
+            xfiber->SleepMs(1000);
+        }
+    });
+
     xfiber->CreateFiber([&]{
         Listener listener = Listener::ListenTCP(7000);
         while (true) {

@@ -50,6 +50,8 @@ public:
 
     bool UnregisterFd(int fd);
 
+    void SleepMs(int ms);
+
     XFiberCtx *SchedCtx();
 
     static XFiber *xfiber() {

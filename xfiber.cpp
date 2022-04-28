@@ -15,7 +15,7 @@ XFiber::XFiber() {
     curr_fiber_ = nullptr;
     efd_ = epoll_create1(0);
     if (efd_ < 0) {
-        perror("epoll_create");
+        LOG_ERROR("epoll_create failed, msg=%s", strerror(errno));
         exit(-1);
     }
 }
@@ -126,7 +126,7 @@ void XFiber::Dispatch() {
         struct epoll_event evs[MAX_EVENT_COUNT];
         int n = epoll_wait(efd_, evs, MAX_EVENT_COUNT, 2);
         if (n < 0) {
-            LOG_ERROR("epoll_wait erorr, msg=%s", strerror(errno));
+            LOG_ERROR("epoll_wait error, msg=%s", strerror(errno));
             continue;
         }
 
@@ -164,8 +164,18 @@ void XFiber::Yield() {
 
 void XFiber::SwitchToSched() {
     assert(curr_fiber_ != nullptr);
-    LOG_DEBUG("swicth to sched");
+    LOG_DEBUG("switch to sched");
     assert(SwitchCtx(curr_fiber_->Ctx(), SchedCtx()) == 0);
+}
+
+void XFiber::SleepMs(int ms) {
+    if (ms < 0) {
+        return;
+    }
+
+    int64_t expired_at = util::NowMs() + ms;
+    RegisterFdWithCurrFiber(-1, expired_at, false);
+    SwitchToSched();
 }
 
 void XFiber::TakeOver(int fd) {
@@ -326,4 +336,5 @@ std::string Fiber::Name() {
 bool Fiber::IsFinished() {
     return status_ == FiberStatus::FINISHED;
 }
+
 
