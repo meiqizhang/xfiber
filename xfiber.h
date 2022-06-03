@@ -25,6 +25,21 @@ typedef struct ucontext_t XFiberCtx;
 #define SwitchCtx(from, to) \
     swapcontext(from, to)
 
+struct WaitingEvents {
+    WaitingEvents() {
+        expire_at_ = -1;
+    }
+    void Reset() {
+        expire_at_ = -1;
+        waiting_fds_r_.clear();
+        waiting_fds_w_.clear();
+    }
+
+    // 一个协程中监听的fd不会太多，所以直接用数组
+    std::vector<int> waiting_fds_r_;
+    std::vector<int> waiting_fds_w_;
+    int64_t expire_at_;
+};
 
 class Fiber;
 
@@ -46,9 +61,9 @@ public:
 
     void TakeOver(int fd);
 
-    bool RegisterFdWithCurrFiber(int fd, int64_t expired_at, bool is_write);
-
     bool UnregisterFd(int fd);
+
+    void RegisterWaitingEvents(WaitingEvents &events);
 
     void SleepMs(int ms);
 
@@ -70,19 +85,19 @@ private:
 
     Fiber *curr_fiber_;
 
-    struct WaitingFiber {
+  struct WaitingFibers {
         Fiber *r_, *w_;
-        WaitingFiber() {
-            r_ = nullptr;
-            w_ = nullptr;
+        WaitingFibers(Fiber *r = nullptr, Fiber *w = nullptr) {
+            r_ = r;
+            w_ = w;
         }
     };
 
-    std::map<int, WaitingFiber> io_waiting_fibers_;
+    std::map<int, WaitingFibers> io_waiting_fibers_;
     // 会不会出现一个fd的读/写被多个协程监听？？不会！
     // 但是一个fiber可能会监听多个fd，实际也不存在，一个连接由一个协程处理
 
-    std::map<int64_t, std::set<Fiber *>> expired_events_;
+    std::map<int64_t, std::set<Fiber *>> expire_events_;
 
     std::vector<Fiber *> finished_fibers_;
 };
@@ -118,37 +133,11 @@ public:
         }
     };
 
-    struct WaitingEvents {
-        // 一个协程中监听的fd不会太多，所以直接用数组
-        std::vector<FdEvent> waiting_fds_r_;
-        std::vector<FdEvent> waiting_fds_w_;
-    };
-
     WaitingEvents &GetWaitingEvents() {
         return waiting_events_;
     }
 
-    void SetReadEvent(const FdEvent &fe) {
-        for (size_t i = 0; i < waiting_events_.waiting_fds_r_.size(); ++i) {
-            if (waiting_events_.waiting_fds_r_[i].fd_ == fe.fd_) {
-                waiting_events_.waiting_fds_r_[i].expired_at_ = fe.expired_at_;
-                return ;
-            }
-        }
-        waiting_events_.waiting_fds_r_.push_back(fe);
-    }
-
-    void SetWriteEvent(const FdEvent &fe) {
-        for (size_t i = 0; i < waiting_events_.waiting_fds_w_.size(); ++i) {
-            if (waiting_events_.waiting_fds_w_[i].fd_ == fe.fd_) {
-                waiting_events_.waiting_fds_w_[i].expired_at_ = fe.expired_at_;
-                return ;
-            }
-        }
-        waiting_events_.waiting_fds_w_.push_back(fe);
-    }
-
-
+    void SetWaitingEvent(const WaitingEvents &events);
 
 private:
     uint64_t seq_;

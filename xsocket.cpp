@@ -104,7 +104,9 @@ std::shared_ptr<Connection> Listener::Accept() {
         else {
             if (errno == EAGAIN) {
                 // accept失败，协程切出
-                xfiber->RegisterFdWithCurrFiber(fd_, -1, false);
+                WaitingEvents events;
+                events.waiting_fds_r_.push_back(fd_);
+                xfiber->RegisterWaitingEvents(events);
                 xfiber->SwitchToSched();
             }
             else if (errno == EINTR) {
@@ -171,7 +173,7 @@ std::shared_ptr<Connection> Connection::ConnectTCP(const char *ipv4, uint16_t po
 ssize_t Connection::Write(const char *buf, size_t sz, int timeout_ms) const {
     size_t write_bytes = 0;
     XFiber *xfiber = XFiber::xfiber();
-    int64_t expired_at = timeout_ms > 0 ? util::NowMs() + timeout_ms : -1;
+    int64_t expire_at = timeout_ms > 0 ? util::NowMs() + timeout_ms : -1;
 
     while (write_bytes < sz) {
         int n = write(fd_, buf + write_bytes, sz - write_bytes);
@@ -184,7 +186,7 @@ ssize_t Connection::Write(const char *buf, size_t sz, int timeout_ms) const {
             return 0;
         }
         else {
-            if (expired_at > 0 && util::NowMs() >= expired_at) {
+            if (expire_at > 0 && util::NowMs() >= expire_at) {
                 LOG_WARNING("write to fd[%d] timeout after wait %dms", fd_, timeout_ms);
                 return 0;
             }
@@ -194,7 +196,10 @@ ssize_t Connection::Write(const char *buf, size_t sz, int timeout_ms) const {
             }
             else if (errno == EAGAIN) {
                 LOG_DEBUG("write to fd[%d] return EAGIN, add fd into IO waiting events and switch to sched", fd_);
-                xfiber->RegisterFdWithCurrFiber(fd_, expired_at, true);
+                WaitingEvents events;
+                events.expire_at_ = expire_at;
+                events.waiting_fds_w_.push_back(fd_);
+                xfiber->RegisterWaitingEvents(events);
                 xfiber->SwitchToSched();
             }
             else {
@@ -208,7 +213,7 @@ ssize_t Connection::Write(const char *buf, size_t sz, int timeout_ms) const {
 
 ssize_t Connection::Read(char *buf, size_t sz, int timeout_ms) const {
     XFiber *xfiber = XFiber::xfiber();
-    int64_t expired_at = timeout_ms > 0 ? util::NowMs() + timeout_ms : -1;
+    int64_t expire_at = timeout_ms > 0 ? util::NowMs() + timeout_ms : -1;
 
     while (true) {
         int n = read(fd_, buf, sz);
@@ -221,7 +226,7 @@ ssize_t Connection::Read(char *buf, size_t sz, int timeout_ms) const {
             return 0;
         }
         else {
-            if (expired_at > 0 && util::NowMs() >= expired_at) {
+            if (expire_at > 0 && util::NowMs() >= expire_at) {
                 LOG_WARNING("read from fd[%d] timeout after wait %dms", fd_, timeout_ms);
                 return 0;
             }
@@ -230,8 +235,11 @@ ssize_t Connection::Read(char *buf, size_t sz, int timeout_ms) const {
                 return -1;
             }
             else if (errno == EAGAIN) {
-                LOG_DEBUG("read from fd[%d] return EAGIN, add into waiting/expired events with expired at %ld  and switch to sched", fd_, expired_at);
-                xfiber->RegisterFdWithCurrFiber(fd_, expired_at, false);
+                LOG_DEBUG("read from fd[%d] return EAGIN, add into waiting/expire events with expire at %ld  and switch to sched", fd_, expire_at);
+                WaitingEvents events;
+                events.expire_at_ = expire_at;
+                events.waiting_fds_r_.push_back(fd_);
+                xfiber->RegisterWaitingEvents(events);
                 xfiber->SwitchToSched();
             }
             else if (errno == EINTR) {
